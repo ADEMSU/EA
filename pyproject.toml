@@ -1,0 +1,25 @@
+[project]
+name = "epizode-analyzer"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "DAMSU", email = "a.dmitry.msu@yandex.ru"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.dependencies]
+python = ">=3.12,<4.0"
+zeep = "4.2.1"
+pydantic = "1.10.8"
+simhash = "2.1.2"
+loguru = "0.7.0"
+pandas = "2.0.1"
+openpyxl = "3.1.2"
+python-dotenv = "1.0.0"
+tzdata = "*"
+openai = "1.12.0"
