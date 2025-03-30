@@ -1,0 +1,266 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1 class="display-5">Панель управления</h1>
+        <p class="lead">Добро пожаловать в систему анализа данных Медиалогии</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-primary mb-3">
+            <div class="card-body text-center">
+                <h5 class="card-title">Всего постов</h5>
+                <h2 class="display-4">{{ posts_count }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-success mb-3">
+            <div class="card-body text-center">
+                <h5 class="card-title">Проанализировано</h5>
+                <h2 class="display-4">{{ analyzed_posts_count }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info mb-3">
+            <div class="card-body text-center">
+                <h5 class="card-title">% проанализировано</h5>
+                <h2 class="display-4">{{ "%.1f"|format(analyzed_posts_count / posts_count * 100) if posts_count else 0 }}%</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Статистика тональности</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="tonalityChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Получить новые данные</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('posts.fetch_posts') }}" method="POST">
+                    <div class="mb-3">
+                        <label for="report_id" class="form-label">ID отчета Медиалогии</label>
+                        <input type="text" class="form-control" id="report_id" name="report_id" required value="{{ current_app.config.get('MEDIALOGIA_REPORT_ID', '') }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="date_type" id="date_type_days" value="days" checked>
+                            <label class="form-check-label" for="date_type_days">
+                                Указать количество дней
+                            </label>
+                        </div>
+                        <div class="ms-4 mt-2 date-days-ago">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="days_ago" class="form-label">Количество дней</label>
+                                    <input type="number" class="form-control" id="days_ago" name="days_ago" value="1" min="1" max="30">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-check mt-3">
+                            <input class="form-check-input" type="radio" name="date_type" id="date_type_range" value="range">
+                            <label class="form-check-label" for="date_type_range">
+                                Указать период
+                            </label>
+                        </div>
+                        <div class="ms-4 mt-2 date-range" style="display: none;">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="date_from" class="form-label">С</label>
+                                    <input type="date" class="form-control" id="date_from" name="date_from">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="date_to" class="form-label">По</label>
+                                    <input type="date" class="form-control" id="date_to" name="date_to">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Время (опционально)</label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text">С</span>
+                                    <input type="time" class="form-control" id="time_from" name="time_from">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text">По</span>
+                                    <input type="time" class="form-control" id="time_to" name="time_to">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-cloud-download me-1"></i> Получить данные
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Последние посты</h5>
+                <a href="{{ url_for('posts.posts_list') }}" class="btn btn-sm btn-outline-primary">Все посты</a>
+            </div>
+            <div class="card-body">
+                {% if latest_posts %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Заголовок</th>
+                                <th>Дата публикации</th>
+                                <th>Тональность</th>
+                                <th>Источник</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for post in latest_posts %}
+                            <tr>
+                                <td>{{ post.post_id }}</td>
+                                <td>{{ post.title or 'Без заголовка' }}</td>
+                                <td>{{ post.published_on.strftime('%d.%m.%Y %H:%M') if post.published_on else 'Не указана' }}</td>
+                                <td>
+                                    {% if post.analysis and post.analysis.tonality %}
+                                        {% if post.analysis.tonality.name == 'POSITIVE' %}
+                                            <span class="badge bg-success">Позитивная</span>
+                                        {% elif post.analysis.tonality.name == 'NEGATIVE' %}
+                                            <span class="badge bg-danger">Негативная</span>
+                                        {% elif post.analysis.tonality.name == 'NEUTRAL' %}
+                                            <span class="badge bg-secondary">Нейтральная</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">Неизвестно</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-light text-dark">Не проанализирован</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ post.blog_host }}</td>
+                                <td>
+                                    <a href="{{ url_for('posts.post_detail', post_id=post.post_id) }}" class="btn btn-sm btn-outline-info">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    Нет данных для отображения. Получите посты из Медиалогии.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Переключение режима выбора дат
+        const dateTypeDays = document.getElementById('date_type_days');
+        const dateTypeRange = document.getElementById('date_type_range');
+        const dateDaysAgo = document.querySelector('.date-days-ago');
+        const dateRange = document.querySelector('.date-range');
+        
+        dateTypeDays.addEventListener('change', function() {
+            if (this.checked) {
+                dateDaysAgo.style.display = 'block';
+                dateRange.style.display = 'none';
+            }
+        });
+        
+        dateTypeRange.addEventListener('change', function() {
+            if (this.checked) {
+                dateDaysAgo.style.display = 'none';
+                dateRange.style.display = 'block';
+            }
+        });
+        
+        // График тональности
+        const tonalityData = {
+            labels: ['Позитивная', 'Нейтральная', 'Негативная', 'Неизвестно'],
+            datasets: [{
+                label: 'Тональность постов',
+                data: [
+                    { tonality_data.get('POSITIVE', 0) },
+                    { tonality_data.get('NEUTRAL', 0) },
+                    { tonality_data.get('NEGATIVE', 0) },
+                    { tonality_data.get('UNKNOWN', 0) }
+                ],
+                backgroundColor: [
+                    'rgba(40, 167, 69, 0.7)',
+                    'rgba(108, 117, 125, 0.7)',
+                    'rgba(220, 53, 69, 0.7)',
+                    'rgba(0, 123, 255, 0.7)'
+                ],
+                borderColor: [
+                    'rgb(40, 167, 69)',
+                    'rgb(108, 117, 125)',
+                    'rgb(220, 53, 69)',
+                    'rgb(0, 123, 255)'
+                ],
+                borderWidth: 1
+            }]
+        };
+        
+        const ctx = document.getElementById('tonalityChart').getContext('2d');
+        const tonalityChart = new Chart(ctx, {
+            type: 'pie',
+            data: tonalityData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const total = context.dataset.data.reduce((acc, val) => acc + val, 0);
+                                const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

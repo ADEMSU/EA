@@ -1,0 +1,72 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1 class="display-5">Экспорт данных</h1>
+        <p class="lead">Экспорт данных из системы в Excel</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Параметры экспорта</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('export.export_posts') }}" method="POST">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="search_query" class="form-label">Поиск</label>
+                            <input type="text" class="form-control" id="search_query" name="search_query" placeholder="Введите текст для поиска...">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="tonality" class="form-label">Тональность</label>
+                            <select class="form-select" id="tonality" name="tonality">
+                                <option value="">Все</option>
+                                <option value="POSITIVE">Позитивная</option>
+                                <option value="NEUTRAL">Нейтральная</option>
+                                <option value="NEGATIVE">Негативная</option>
+                                <option value="UNKNOWN">Неизвестно</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="object_id" class="form-label">Объект</label>
+                            <select class="form-select" id="object_id" name="object_id">
+                                <option value="">Все</option>
+                                {% for obj in objects %}
+                                <option value="{{ obj.object_id }}">{{ obj.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="date_from" class="form-label">Дата с</label>
+                            <input type="date" class="form-control" id="date_from" name="date_from">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="date_to" class="form-label">Дата по</label>
+                            <input type="date" class="form-control" id="date_to" name="date_to">
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check mt-4">
+                                <input class="form-check-input" type="checkbox" id="include_analysis" name="include_analysis" checked>
+                                <label class="form-check-label" for="include_analysis">
+                                    Включить результаты анализа
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-file-earmark-excel me-1"></i> Экспортировать
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

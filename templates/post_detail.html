@@ -1,0 +1,188 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('posts.dashboard') }}">Панель управления</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('posts.posts_list') }}">Посты</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ post.title or 'Пост #' + post.post_id }}</li>
+            </ol>
+        </nav>
+        <h1 class="display-5">{{ post.title or 'Пост без заголовка' }}</h1>
+        <div class="mb-2">
+            <span class="text-muted">ID поста: {{ post.post_id }}</span>
+        </div>
+        <div class="mb-2">
+            {% if post.published_on %}
+            <span class="badge bg-secondary">{{ post.published_on.strftime('%d.%m.%Y %H:%M') }}</span>
+            {% endif %}
+            {% if post.blog_host %}
+            <span class="badge bg-primary">{{ post.blog_host }}</span>
+            {% endif %}
+            {% if post.blog_host_type %}
+            <span class="badge bg-info">{{ post.blog_host_type.name }}</span>
+            {% endif %}
+            {% if post.analysis and post.analysis.tonality %}
+                {% if post.analysis.tonality.name == 'POSITIVE' %}
+                    <span class="badge bg-success">Позитивная</span>
+                {% elif post.analysis.tonality.name == 'NEGATIVE' %}
+                    <span class="badge bg-danger">Негативная</span>
+                {% elif post.analysis.tonality.name == 'NEUTRAL' %}
+                    <span class="badge bg-secondary">Нейтральная</span>
+                {% else %}
+                    <span class="badge bg-light text-dark">Тональность: неизвестно</span>
+                {% endif %}
+            {% else %}
+                <span class="badge bg-light text-dark">Не проанализирован</span>
+            {% endif %}
+        </div>
+        {% if post.object_ids %}
+        <div class="mb-3">
+            <strong>Объекты:</strong> {{ object_service.get_object_names(post.object_ids) }}
+        </div>
+        {% endif %}
+        {% if post.url %}
+        <div class="mb-3">
+            <a href="{{ post.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-link-45deg me-1"></i> Перейти к оригиналу
+            </a>
+            <a href="{{ url_for('posts.analyze_posts') }}?post_ids={{ post.post_id }}" 
+               class="btn btn-sm btn-outline-success ms-2">
+               <i class="bi bi-graph-up me-1"></i> Анализировать
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Контент</h5>
+            </div>
+            <div class="card-body">
+                <div class="post-content mb-4">
+                    {% if post.content %}
+                    <div class="post-text">
+                        {{ post.content|nl2br }}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning">Контент отсутствует</div>
+                    {% endif %}
+                </div>
+                
+                {% if post.url %}
+                <div class="post-url mb-3">
+                    <strong>URL:</strong> <a href="{{ post.url }}" target="_blank">{{ post.url }}</a>
+                </div>
+                {% endif %}
+                
+                {% if post.simhash %}
+                <div class="post-simhash mb-3">
+                    <strong>Simhash:</strong> {{ post.simhash }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Результаты анализа</h5>
+                <a href="{{ url_for('posts.analyze_posts') }}?post_ids={{ post.post_id }}" 
+                   class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-arrow-repeat me-1"></i> 
+                    {% if post.analysis %}Повторить{% else %}Анализировать{% endif %}
+                </a>
+            </div>
+            <div class="card-body">
+                {% if post.analysis %}
+                <div class="mb-3">
+                    <strong>Тональность:</strong>
+                    {% if post.analysis.tonality.name == 'POSITIVE' %}
+                        <span class="badge bg-success">Позитивная</span>
+                    {% elif post.analysis.tonality.name == 'NEGATIVE' %}
+                        <span class="badge bg-danger">Негативная</span>
+                    {% elif post.analysis.tonality.name == 'NEUTRAL' %}
+                        <span class="badge bg-secondary">Нейтральная</span>
+                    {% else %}
+                        <span class="badge bg-light text-dark">Неизвестно</span>
+                    {% endif %}
+                </div>
+                
+                {% if post.analysis.lmm_title %}
+                <div class="mb-3">
+                    <strong>Заголовок LMM:</strong>
+                    <div class="mt-1">{{ post.analysis.lmm_title }}</div>
+                </div>
+                {% endif %}
+                
+                {% if post.analysis.description %}
+                <div class="mb-3">
+                    <strong>Краткое описание:</strong>
+                    <div class="mt-1">{{ post.analysis.description|nl2br }}</div>
+                </div>
+                {% endif %}
+                
+                <div class="mb-3">
+                    <strong>Дата анализа:</strong>
+                    <div>{{ post.analysis.analyzed_at.strftime('%d.%m.%Y %H:%M:%S') if post.analysis.analyzed_at else 'Не указана' }}</div>
+                </div>
+                
+                {% if post.analysis.model_used %}
+                <div class="mb-3">
+                    <strong>Использованная модель:</strong>
+                    <div>{{ post.analysis.model_used }}</div>
+                </div>
+                {% endif %}
+                
+                {% else %}
+                <div class="alert alert-info">
+                    Пост еще не проанализирован. Нажмите "Анализировать" для запуска анализа.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Метаданные</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>ID поста:</strong> {{ post.post_id }}
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Дата публикации:</strong>
+                    <div>{{ post.published_on.strftime('%d.%m.%Y %H:%M:%S') if post.published_on else 'Не указана' }}</div>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Источник:</strong>
+                    <div>{{ post.blog_host or 'Не указан' }}</div>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Тип источника:</strong>
+                    <div>{{ post.blog_host_type.name if post.blog_host_type else 'Не указан' }}</div>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Дата добавления:</strong>
+                    <div>{{ post.created_at.strftime('%d.%m.%Y %H:%M:%S') if post.created_at else 'Не указана' }}</div>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Последнее обновление:</strong>
+                    <div>{{ post.updated_at.strftime('%d.%m.%Y %H:%M:%S') if post.updated_at else 'Не указано' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,21 +1,81 @@
 import json
 import traceback
-from typing import List, Dict, Any, Callable, Optional
 import time
 import re
 import os
-import requests
 import hashlib
+import requests
+from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
 from loguru import logger
+from flask import current_app
+from celery_app import celery
+from celery import shared_task
 
-class LmmAnalyzer:
-    """Класс для анализа текстов с помощью LLM через OpenRouter API"""
+
+from models.database import db
+from models.post_model import Post
+from models.analysis_model import PostAnalysis, TonalityType
+
+@celery.task(name='analyze_batch_task')
+def analyze_batch_task(batch, api_key, model, site_url, site_name):
+    """
+    Celery-задача для асинхронного анализа батча постов.
     
-    def __init__(self, api_key, model="deepseek/deepseek-chat-v3-0324:free", max_tokens_per_batch=30000, 
+    Args:
+        batch: Список постов для анализа.
+        api_key: API ключ для LMM.
+        model: Название модели для LMM.
+        site_url: URL сайта.
+        site_name: Название сайта.
+        
+    Returns:
+        List[Dict]: Результаты анализа.
+    """
+    try:
+        logger.info(f"Запуск асинхронной задачи анализа батча из {len(batch)} постов")
+        
+        # Создаем экземпляр сервиса LMM для анализа
+        lmm_service = LmmService(api_key=api_key, model=model, site_url=site_url, site_name=site_name)
+        
+        # Создаем промпт для текущего батча
+        prompt = lmm_service._create_prompt(batch)
+        
+        # Отправляем запрос в LMM
+        results = lmm_service._send_to_lmm(prompt)
+        
+        logger.info(f"Задача завершена, получено {len(results)} результатов")
+        
+        # Обрабатываем результаты и сохраняем в БД
+        # При использовании ContextTask в celery_app.py app.app_context() уже активен
+        lmm_service.process_results(results)
+        
+        return results
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении задачи анализа батча: {e}")
+        logger.error(traceback.format_exc())
+        return []
+
+
+class LmmService:
+    """Сервис для анализа текстов с помощью LLM через OpenRouter API."""
+    
+    def __init__(self, api_key=None, model=None, max_tokens_per_batch=30000, 
                  max_retries=3, retry_delay=5, site_url=None, site_name=None):
-        self.api_key = api_key
-        self.model = model
+        """
+        Инициализация сервиса LMM.
+        
+        Args:
+            api_key: API ключ для OpenRouter.
+            model: Модель для использования в OpenRouter.
+            max_tokens_per_batch: Максимальное количество токенов в одном батче.
+            max_retries: Максимальное количество попыток при ошибке.
+            retry_delay: Задержка между повторными попытками в секундах.
+            site_url: URL сайта для запросов к API.
+            site_name: Название сайта для запросов к API.
+        """
+        self.api_key = api_key or current_app.config['OPENROUTER_API_KEY']
+        self.model = model or current_app.config['LMM_MODEL']
         self.max_tokens_per_batch = max_tokens_per_batch
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -30,13 +90,13 @@ class LmmAnalyzer:
     
     def _create_batches(self, posts: List[Dict]) -> List[List[Dict]]:
         """
-        Разделяет список постов на батчи, учитывая ограничение по токенам
+        Разделяет список постов на батчи, учитывая ограничение по токенам.
         
         Args:
-            posts: Список постов для анализа
+            posts: Список постов для анализа.
             
         Returns:
-            List[List[Dict]]: Список батчей для отправки в LMM
+            List[List[Dict]]: Список батчей для отправки в LMM.
         """
         batches = []
         current_batch = []
@@ -95,13 +155,13 @@ class LmmAnalyzer:
     
     def _create_prompt(self, batch: List[Dict]) -> str:
         """
-        Создает промпт для анализа постов в LMM с акцентом на консистентность
+        Создает промпт для анализа постов в LMM с акцентом на консистентность.
         
         Args:
-            batch: Список постов для анализа
+            batch: Список постов для анализа.
             
         Returns:
-            str: Промпт для отправки в LMM
+            str: Промпт для отправки в LMM.
         """
         prompt = """
 Проанализируй следующие посты. Для каждого поста:
@@ -155,87 +215,97 @@ class LmmAnalyzer:
         
         return prompt
     
-    def analyze_posts(self, posts: List[Dict], batch_callback: Optional[Callable[[List[Dict], List[Dict]], None]] = None) -> List[Dict]:
+    def analyze_posts(self, posts_data: List[Dict]) -> List[Dict]:
         """
-        Анализирует посты с помощью LMM с обеспечением консистентности
+        Анализирует посты с помощью LMM с обеспечением консистентности.
         
         Args:
-            posts: Список постов для анализа
-            batch_callback: Функция обратного вызова для обработки результатов батча
+            posts_data: Список словарей с данными постов.
                 
         Returns:
-            List[Dict]: Результаты анализа
+            List[Dict]: Результаты анализа.
         """
-        all_results = []
-        
-        # Предварительно проверяем кэш для всех постов
-        cached_results = []
-        posts_to_analyze = []
-        
-        for post in posts:
-            obj = post.get('object', '')
-            content_hash = self._get_content_hash(post.get('content', ''))
-            cache_key = f"{obj}:{content_hash}"
-            
-            if cache_key in self.results_cache:
-                # Если в кэше есть результат для похожего поста, используем его
-                cached_result = self.results_cache[cache_key].copy()
-                cached_result['post_id'] = post.get('post_id', '')
-                cached_results.append(cached_result)
-            else:
-                posts_to_analyze.append(post)
-        
-        logger.info(f"Найдено {len(cached_results)} кэшированных результатов, {len(posts_to_analyze)} постов для анализа")
-        
-        # Добавляем кэшированные результаты
-        all_results.extend(cached_results)
+        # Инициируем асинхронные задачи для обработки постов
+        task_ids = []
         
         # Создаем батчи для обработки
-        batches = self._create_batches(posts_to_analyze)
-        logger.info(f"Начинаем анализ {len(posts_to_analyze)} постов в {len(batches)} батчах")
+        batches = self._create_batches(posts_data)
+        logger.info(f"Начинаем анализ {len(posts_data)} постов в {len(batches)} батчах")
         
+        # Запускаем задачи для каждого батча
         for i, batch in enumerate(batches):
-            logger.info(f"Обработка батча {i+1}/{len(batches)} ({len(batch)} постов)")
-            
-            try:
-                # Создаем промпт для текущего батча
-                prompt = self._create_prompt(batch)
-                
-                # Отправляем запрос в LMM
-                batch_results = self._send_to_lmm(prompt)
-                
-                # Обновляем кэш результатов
-                self._update_cache(batch, batch_results)
-                
-                # Добавляем результаты в общий список
-                all_results.extend(batch_results)
-                
-                # Вызываем callback-функцию, если она предоставлена
-                if batch_callback is not None and callable(batch_callback):
-                    try:
-                        # Вызываем callback только для новых результатов батча
-                        batch_callback(batch, batch_results)
-                        logger.info(f"Callback-функция успешно выполнена для батча {i+1}/{len(batches)}")
-                    except Exception as e:
-                        logger.error(f"Ошибка при выполнении callback-функции для батча {i+1}: {e}")
-                        logger.error(traceback.format_exc())
-                
-                logger.info(f"Успешно обработан батч {i+1}/{len(batches)}")
-            except Exception as e:
-                logger.error(f"Ошибка при обработке батча {i+1}: {e}")
-                logger.error(traceback.format_exc())
+            logger.info(f"Запуск задачи для батча {i+1}/{len(batches)} ({len(batch)} постов)")
+            task = analyze_batch_task.delay(batch, self.api_key, self.model, self.site_url, self.site_name)
+            task_ids.append(task.id)
         
-        return all_results
+        return {"task_ids": task_ids}
+    
+    def process_results(self, results: List[Dict]):
+        """
+        Обрабатывает результаты анализа LMM и сохраняет их в базу данных.
+        
+        Args:
+            results: Список результатов анализа.
+        """
+        logger.info(f"Обработка {len(results)} результатов анализа")
+        
+        for result in results:
+            try:
+                post_id = result.get('post_id')
+                if not post_id:
+                    logger.warning(f"Результат без post_id: {result}")
+                    continue
+                
+                # Ищем пост в базе данных
+                post = Post.query.filter_by(post_id=post_id).first()
+                if not post:
+                    logger.warning(f"Пост с ID {post_id} не найден в базе данных")
+                    continue
+                
+                # Ищем существующий анализ для обновления
+                analysis = PostAnalysis.query.filter_by(post_id=post.id).first()
+                if analysis:
+                    # Обновляем существующий анализ
+                    analysis.lmm_title = result.get('title', '')
+                    analysis.description = result.get('description', '')
+                    analysis.tonality = self._parse_tonality(result.get('tonality', ''))
+                    analysis.analyzed_at = datetime.utcnow()
+                    analysis.model_used = self.model
+                else:
+                    # Создаем новый анализ
+                    analysis = PostAnalysis(
+                        post_id=post.id,
+                        lmm_title=result.get('title', ''),
+                        description=result.get('description', ''),
+                        tonality=self._parse_tonality(result.get('tonality', '')),
+                        analyzed_at=datetime.utcnow(),
+                        model_used=self.model
+                    )
+                    db.session.add(analysis)
+                
+                # Если для поста нет заголовка, используем заголовок из LMM
+                if not post.title and result.get('title'):
+                    post.title = result.get('title')
+                
+                db.session.commit()
+                logger.info(f"Результаты анализа для поста {post_id} сохранены в БД")
+                
+            except Exception as e:
+                logger.error(f"Ошибка при обработке результата анализа: {e}")
+                logger.error(traceback.format_exc())
+                db.session.rollback()
+        
+        logger.info(f"Завершена обработка {len(results)} результатов анализа")
     
     def _send_to_lmm(self, prompt: str) -> List[Dict]:
         """
-        Отправляет запрос в LMM и обрабатывает ответ
+        Отправляет запрос в LMM и обрабатывает ответ.
         
         Args:
-            prompt: Промпт для отправки
+            prompt: Промпт для отправки.
             
         Returns:
-            List[Dict]: Результаты анализа в виде списка словарей
+            List[Dict]: Результаты анализа в виде списка словарей.
         """
         for attempt in range(self.max_retries):
             try:
@@ -343,13 +413,13 @@ class LmmAnalyzer:
     
     def _parse_lmm_response(self, response_text: str) -> List[Dict]:
         """
-        Парсит ответ LMM в структурированном текстовом формате
+        Парсит ответ LMM в структурированном текстовом формате.
         
         Args:
-            response_text: Текстовый ответ от LMM
+            response_text: Текстовый ответ от LMM.
             
         Returns:
-            List[Dict]: Список словарей с результатами анализа
+            List[Dict]: Список словарей с результатами анализа.
         """
         try:
             results = []
@@ -470,14 +540,14 @@ class LmmAnalyzer:
             return []
 
     def _get_content_hash(self, content: str) -> str:
-        """Создаёт простой хэш контента для использования в кэше"""
+        """Создаёт простой хэш контента для использования в кэше."""
         # Используем простое хеширование для нахождения похожих постов
         # Берем только первые 200 символов, чтобы похожие посты имели одинаковый хэш
         content_sample = content[:200].lower()
         return hashlib.md5(content_sample.encode('utf-8')).hexdigest()
 
     def _update_cache(self, batch: List[Dict], results: List[Dict]):
-        """Обновляет кэш результатов для обеспечения консистентности"""
+        """Обновляет кэш результатов для обеспечения консистентности."""
         for i, post in enumerate(batch):
             if i >= len(results) or not post or not results[i]:
                 continue
@@ -496,3 +566,63 @@ class LmmAnalyzer:
                 'description': cached_result.get('description', ''),
                 'title': cached_result.get('title', '')
             }
+    
+    def _parse_tonality(self, tonality_str: str) -> TonalityType:
+        """
+        Преобразует строковое представление тональности в enum TonalityType.
+        
+        Args:
+            tonality_str: Строковое представление тональности.
+            
+        Returns:
+            TonalityType: Значение enum.
+        """
+        tonality_str = tonality_str.lower()
+        if "негатив" in tonality_str:
+            return TonalityType.NEGATIVE
+        elif "позитив" in tonality_str:
+            return TonalityType.POSITIVE
+        elif "нейтрал" in tonality_str:
+            return TonalityType.NEUTRAL
+        else:
+            return TonalityType.UNKNOWN
+
+
+@shared_task
+def analyze_batch_task(batch, api_key, model, site_url, site_name):
+    """
+    Celery-задача для асинхронного анализа батча постов.
+    
+    Args:
+        batch: Список постов для анализа.
+        api_key: API ключ для LMM.
+        model: Название модели для LMM.
+        site_url: URL сайта.
+        site_name: Название сайта.
+        
+    Returns:
+        List[Dict]: Результаты анализа.
+    """
+    try:
+        logger.info(f"Запуск асинхронной задачи анализа батча из {len(batch)} постов")
+        
+        # Создаем экземпляр сервиса LMM для анализа
+        lmm_service = LmmService(api_key=api_key, model=model, site_url=site_url, site_name=site_name)
+        
+        # Создаем промпт для текущего батча
+        prompt = lmm_service._create_prompt(batch)
+        
+        # Отправляем запрос в LMM
+        results = lmm_service._send_to_lmm(prompt)
+        
+        logger.info(f"Задача завершена, получено {len(results)} результатов")
+        
+        # Обрабатываем результаты и сохраняем в БД
+        with app.app_context():
+            lmm_service.process_results(results)
+        
+        return results
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении задачи анализа батча: {e}")
+        logger.error(traceback.format_exc())
+        return []

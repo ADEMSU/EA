@@ -1,0 +1,76 @@
+/* Основные стили */
+body {
+    background-color: #f8f9fa;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Стили заголовков */
+.display-5 {
+    font-weight: 300;
+}
+
+/* Стили для карточек */
+.card {
+    border-radius: 0.5rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    background-color: rgba(0, 0, 0, 0.03);
+    padding: 1rem;
+}
+
+/* Стили для навигации */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Стили для текста поста */
+.post-text {
+    white-space: pre-line;
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+/* Стили для пагинации */
+.pagination {
+    margin-top: 1.5rem;
+}
+
+/* Утилиты */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+/* Стили для форм */
+.form-control:focus, .form-select:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Стили для футера */
+.footer {
+    margin-top: 3rem;
+    padding: 2rem 0;
+}
+
+/* Стили для уведомлений */
+.alert {
+    border-radius: 0.5rem;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .display-5 {
+        font-size: 1.8rem;
+    }
+    
+    .lead {
+        font-size: 1rem;
+    }
+}

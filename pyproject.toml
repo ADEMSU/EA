@@ -1,17 +1,3 @@
-[project]
-name = "epizode-analyzer"
-version = "0.1.0"
-description = ""
-authors = [
-    {name = "DAMSU", email = "a.dmitry.msu@yandex.ru"}
-]
-readme = "README.md"
-requires-python = ">=3.12"
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
-
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
 zeep = "4.2.1"
@@ -22,4 +8,20 @@ pandas = "2.0.1"
 openpyxl = "3.1.2"
 python-dotenv = "1.0.0"
 tzdata = "*"
-openai = "1.12.0"
+requests = "2.31.0"
+# Добавленные веб-зависимости
+flask = "2.2.3"
+flask-login = "0.6.2"
+flask-wtf = "1.1.1"
+flask-sqlalchemy = "3.0.3"
+flask-migrate = "4.0.4"
+werkzeug = "2.2.3"
+celery = "5.2.7"
+redis = "4.5.4"
+gunicorn = "20.1.0"
+# Дополнительные зависимости
+jinja2 = "3.1.2"
+itsdangerous = "2.1.2"
+click = "8.1.3"
+markupsafe = "2.1.2"
+email-validator = "1.3.1"  # Для проверки email
